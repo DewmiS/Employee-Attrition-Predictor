@@ -1,9 +1,8 @@
 import streamlit as st
-import pickle as pickle
 import pandas as pd
-from streamlit.source_util import page_icon_and_name
 import joblib
 import plotly.graph_objects as go
+import numpy as np
 
 RADAR_FEATURES = {
     "Compensation": ["MonthlyIncome", "StockOptionLevel", "PercentSalaryHike"],
@@ -18,7 +17,6 @@ def add_sidebar():
 
     bundle = joblib.load("model/attrition_bundle.pkl")
 
-    model = bundle["model"]
     feature_names = bundle["feature_names"]
     feature_min = bundle["feature_min"]
     feature_max = bundle["feature_max"]
@@ -88,12 +86,12 @@ def add_sidebar():
         ("Marital Status: Single", "MaritalStatus_Single"),
     ]
 
-    BINARY_FEATURES = {
+    binary_features = {
         "Gender": "Male",
         "OverTime": "Over Time"
     }
 
-    ONE_HOT_GROUPS = {
+    one_hot_groups = {
         "Business Travel": {
             "Non-Travel": "Travel_Non-Travel",
             "Frequently": "Travel_Travel_Frequently",
@@ -134,9 +132,9 @@ def add_sidebar():
 
     st.sidebar.subheader("Numeric Features")
     for label, key in sidebar_labels:
-        if key in BINARY_FEATURES:
+        if key in binary_features:
             continue
-        if any(key in group.values() for group in ONE_HOT_GROUPS.values()):
+        if any(key in group.values() for group in one_hot_groups.values()):
             continue
 
         inputs[key] = st.sidebar.slider(
@@ -148,12 +146,12 @@ def add_sidebar():
 
 
     st.sidebar.subheader("Binary Features")
-    for key, label in BINARY_FEATURES.items():
+    for key, label in binary_features.items():
         inputs[key] = 1 if st.sidebar.checkbox(label) else 0
 
     st.sidebar.subheader("Categorical Features")
 
-    for group_label, options in ONE_HOT_GROUPS.items():
+    for group_label, options in one_hot_groups.items():
         choice = st.sidebar.selectbox(group_label, list(options.keys()))
 
         for col in options.values():
@@ -218,6 +216,20 @@ def build_radar_values(inputs, feature_min, feature_max):
     return radar_norm
 
 
+def add_predictions(input_data):
+    model = joblib.load(open("model/attrition_random_forest_model.pkl", "rb"))
+
+    input_array = np.array(list(input_data.values())).reshape(1, -1)
+
+    predictions = model.predict(input_array)
+
+    if predictions[0] == 1:
+        st.write("Employee may leave the company")
+    else:
+        st.write("Employee may not leave the company")
+
+    st.write("Probability of leaving company", model.predict_proba(input_array)[0][1])
+    st.write("Probability of not leaving company", model.predict_proba(input_array)[0][0])
 
 
 def main():
@@ -237,13 +249,13 @@ def main():
     col1, col2 = st.columns([3,2])
 
     with col1:
-        # ---- Radar Chart ----
         radar_chart = get_radar_chart(input_data, feature_min, feature_max)
         st.plotly_chart(radar_chart, width="stretch")
 
-        st.markdown("---")  # visual separator
+        add_predictions(input_data)
 
-        # ---- Feature Importance Plot ----
+        st.markdown("---")
+
         bundle = joblib.load("model/attrition_bundle.pkl")
         model = bundle["model"]
         feature_names = bundle["feature_names"]
