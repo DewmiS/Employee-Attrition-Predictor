@@ -3,7 +3,15 @@ import pickle as pickle
 import pandas as pd
 from streamlit.source_util import page_icon_and_name
 import joblib
+import plotly.graph_objects as go
 
+RADAR_FEATURES = {
+    "Compensation": ["MonthlyIncome", "StockOptionLevel", "PercentSalaryHike"],
+    "Workload": ["OverTime", "TotalWorkingYears", "YearsAtCompany"],
+    "Satisfaction": ["JobSatisfaction", "EnvironmentSatisfaction", "WorkLifeBalance"],
+    "Career Growth": ["JobLevel", "TrainingTimesLastYear", "YearsSinceLastPromotion"],
+    "Stability": ["NumCompaniesWorked", "YearsWithCurrManager"]
+}
 
 def add_sidebar():
     st.sidebar.header('User Inputs')
@@ -152,7 +160,65 @@ def add_sidebar():
             inputs[col] = 0
 
         inputs[options[choice]] = 1
-    return inputs
+    return inputs, feature_min, feature_max
+
+
+def normalize(value, min_val, max_val):
+    if max_val == min_val:
+        return 0
+    return (value - min_val) / (max_val - min_val)
+
+
+def get_radar_chart(input_data, feature_min, feature_max):
+
+    radar = build_radar_values(input_data, feature_min, feature_max)
+
+    categories = list(radar.keys())
+    values = list(radar.values())
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        name='Employee Profile'
+    ))
+
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1]
+            )
+        ),
+        showlegend=False
+    )
+
+    return fig
+
+
+def build_radar_values(inputs, feature_min, feature_max):
+
+    radar_norm = {}
+
+    for axis, features in RADAR_FEATURES.items():
+        values = []
+        norm_values = []
+
+        for f in features:
+            val = inputs[f]
+            min_v = feature_min[f]
+            max_v = feature_max[f]
+
+            values.append(val)
+            norm_values.append(normalize(val, min_v, max_v))
+
+        radar_norm[axis] = sum(norm_values) / len(norm_values)
+
+    return radar_norm
+
+
+
 
 def main():
     st.set_page_config(
@@ -162,18 +228,77 @@ def main():
         initial_sidebar_state = "expanded",
     )
 
-    input_data = add_sidebar()
+    input_data, feature_min, feature_max = add_sidebar()
 
     with st.container():
         st.title("Employee Attrition Predictor")
         st.write("Welcome to the Employee Attrition Predictor! This tool is here to help you explore employee data and gain insights that support better workplace decisions.Simply provide the details, and let the system assist you in understanding attrition patterns with ease.")
 
-    col1, col2 = st.columns([4,1])
+    col1, col2 = st.columns([3,2])
 
     with col1:
-        st.write("This is column 1")
+        # ---- Radar Chart ----
+        radar_chart = get_radar_chart(input_data, feature_min, feature_max)
+        st.plotly_chart(radar_chart, width="stretch")
+
+        st.markdown("---")  # visual separator
+
+        # ---- Feature Importance Plot ----
+        bundle = joblib.load("model/attrition_bundle.pkl")
+        model = bundle["model"]
+        feature_names = bundle["feature_names"]
+
+        importance_df = pd.DataFrame({
+            "Feature": feature_names,
+            "Importance": model.feature_importances_
+        }).sort_values(by="Importance", ascending=False).head(15)
+
+        fig_importance = go.Figure(
+            go.Bar(
+                x=importance_df["Importance"],
+                y=importance_df["Feature"],
+                orientation="h"
+            )
+        )
+
+        fig_importance.update_layout(
+            title="Top Factors Influencing Attrition",
+            yaxis=dict(autorange="reversed")
+        )
+
+        st.plotly_chart(fig_importance, width="stretch")
+
     with col2:
-        st.write("This is column 2")
+        st.subheader("Live Model Inputs")
+
+        feature_df = pd.DataFrame(
+            input_data.items(),
+            columns=["Feature", "Value"]
+        )
+
+        st.dataframe(feature_df, use_container_width=True, height=600)
+
+        st.subheader("Explore Individual Features")
+
+        selected_feature = st.selectbox(
+            "Select a feature to inspect",
+            list(input_data.keys())
+        )
+
+        st.metric(
+            label=selected_feature,
+            value=input_data[selected_feature]
+        )
+
+        avg_values = feature_min + (feature_max - feature_min) / 2
+
+        compare_df = pd.DataFrame({
+            "User": input_data,
+            "Average": avg_values
+        }).head(10)
+
+        st.line_chart(compare_df)
+
 
 if __name__ == "__main__":
     main()
