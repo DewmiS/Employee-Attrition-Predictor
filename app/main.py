@@ -5,11 +5,11 @@ import plotly.graph_objects as go
 import numpy as np
 
 RADAR_FEATURES = {
-    "Compensation": ["MonthlyIncome", "StockOptionLevel", "PercentSalaryHike"],
-    "Workload": ["OverTime", "TotalWorkingYears", "YearsAtCompany"],
-    "Satisfaction": ["JobSatisfaction", "EnvironmentSatisfaction", "WorkLifeBalance"],
-    "Career Growth": ["JobLevel", "TrainingTimesLastYear", "YearsSinceLastPromotion"],
-    "Stability": ["NumCompaniesWorked", "YearsWithCurrManager"]
+    "MonthlyIncome", "StockOptionLevel", "PercentSalaryHike",
+    "OverTime", "TotalWorkingYears", "YearsAtCompany",
+    "JobSatisfaction", "EnvironmentSatisfaction", "WorkLifeBalance",
+    "JobLevel", "TrainingTimesLastYear", "YearsSinceLastPromotion",
+    "NumCompaniesWorked", "YearsWithCurrManager"
 }
 
 def add_sidebar():
@@ -196,22 +196,14 @@ def get_radar_chart(input_data, feature_min, feature_max):
 
 
 def build_radar_values(inputs, feature_min, feature_max):
-
     radar_norm = {}
 
-    for axis, features in RADAR_FEATURES.items():
-        values = []
-        norm_values = []
-
-        for f in features:
-            val = inputs[f]
-            min_v = feature_min[f]
-            max_v = feature_max[f]
-
-            values.append(val)
-            norm_values.append(normalize(val, min_v, max_v))
-
-        radar_norm[axis] = sum(norm_values) / len(norm_values)
+    for feature in RADAR_FEATURES:
+        radar_norm[feature] = normalize(
+            inputs[feature],
+            feature_min[feature],
+            feature_max[feature]
+        )
 
     return radar_norm
 
@@ -290,18 +282,7 @@ def main():
 
         st.dataframe(feature_df, use_container_width=True, height=600)
 
-        st.subheader("Explore Individual Features")
-
-        selected_feature = st.selectbox(
-            "Select a feature to inspect",
-            list(input_data.keys())
-        )
-
-        st.metric(
-            label=selected_feature,
-            value=input_data[selected_feature]
-        )
-
+        st.subheader("Input VS Average")
         avg_values = feature_min + (feature_max - feature_min) / 2
 
         compare_df = pd.DataFrame({
